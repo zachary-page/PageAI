@@ -50,6 +50,13 @@ Admins have access to special commands to manage reminders, manually trigger the
      !sendReminder <userId> <threadId>
      ```
 
+5. **`!resetReminders`**  
+   - **Description**: Manually resets all reminders to 24hrs.
+   - **Usage**: 
+     ```
+     !resetReminders
+     ```
+
 ### User Commands
 These commands are available to all users:
 
