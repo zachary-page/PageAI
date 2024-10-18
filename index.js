@@ -116,6 +116,43 @@ function monitorExistingThreads() {
     });
 }
 
+client.on('messageCreate', message => {
+    // Channel ID for #bot-reporting
+    const BOT_REPORTING_CHANNEL_ID = '1235265391056523264';
+
+    // Only process messages from the bot-reporting channel
+    if (message.channel.id === BOT_REPORTING_CHANNEL_ID) {
+
+        // Handle the '!listReminders' command
+        if (message.content.toLowerCase() === '!listreminders') {
+            if (message.member.permissions.has('ADMINISTRATOR')) {
+                // Your existing logic to list reminders
+                db.all(`SELECT * FROM reminders`, (err, rows) => {
+                    if (err) {
+                        message.channel.send('Error retrieving reminders.');
+                        return;
+                    }
+                    if (rows.length === 0) {
+                        message.channel.send('No pending reminders.');
+                    } else {
+                        let reminderList = 'Pending Reminders:\n';
+                        // Build reminder list
+                        rows.forEach(row => {
+                            reminderList += `User ID: ${row.userId}, Thread ID: ${row.threadId}, Reminder Time: ${row.reminderHours} hours\n`;
+                        });
+                        message.channel.send(reminderList);
+                    }
+                });
+            } else {
+                message.channel.send('You do not have permission to use this command.');
+            }
+        }
+
+        // Add other commands if needed (e.g., !sendReminder, !removeReminder)
+    }
+});
+
+
 // Monitor new threads created in the forum
 client.on('threadCreate', thread => {
     if (thread.parentId === MONITORED_FORUM_ID && thread.type === ChannelType.PublicThread) {
