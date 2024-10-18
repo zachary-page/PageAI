@@ -17,7 +17,7 @@ const client = new Client({
 
 const TOKEN = process.env.DISCORD_BOT_TOKEN;
 const MONITORED_FORUM_ID = process.env.MONITORED_FORUM_ID; // Forum ID to monitor
-const ADMIN_REPORT_CHANNEL_ID = process.env.ADMIN_REPORT_CHANNEL_ID; // Admin reporting channel
+const ADMIN_REPORT_CHANNEL_ID = process.env.ADMIN_REPORT_CHANNEL_ID; // Admin reporting channel (used for reports and bot commands)
 const CLIENT_ROLE_ID = process.env.CLIENT_ROLE_ID; // The role ID for "Client"
 const EXCLUDED_DAYS = [6, 0]; // Saturday and Sunday
 const BUSINESS_HOURS = { start: 9, end: 17 }; // Business hours (9 AM to 5 PM)
@@ -68,8 +68,14 @@ function calculateDelay(startDate, hours) {
 }
 
 // Function to check if a member has the "Client" role
-function isClient(member) {
-    return member.roles.cache.has(CLIENT_ROLE_ID);
+async function isClient(guild, userId) {
+    try {
+        const member = await guild.members.fetch(userId);
+        return member.roles.cache.has(CLIENT_ROLE_ID);
+    } catch (err) {
+        console.error(`Error fetching member:`, err);
+        return false;
+    }
 }
 
 // Monitor existing threads and manage reminders
@@ -89,13 +95,13 @@ function monitorExistingThreads() {
                 console.log(`Joined thread: ${thread.name}`);
 
                 thread.messages.fetch({ limit: 10 }).then(messages => {
-                    messages.forEach(message => {
+                    messages.forEach(async (message) => {
                         if (!message.author.bot) {
                             const userId = message.author.id;
-                            const member = message.guild.members.cache.get(userId);
 
                             // Only set timers for "Client" role users
-                            if (isClient(member)) {
+                            const isClientUser = await isClient(message.guild, userId);
+                            if (isClientUser) {
                                 const currentTime = new Date();
 
                                 // Check if the user already has a pending reminder
@@ -164,8 +170,7 @@ function sendReminder(userId, thread, originalMessage) {
 
 // Function to reset timers (admin only)
 client.on('messageCreate', message => {
-    const BOT_REPORTING_CHANNEL_ID = '1235265391056523264';
-    if (message.channel.id === BOT_REPORTING_CHANNEL_ID && message.member.permissions.has('ADMINISTRATOR')) {
+    if (message.channel.id === ADMIN_REPORT_CHANNEL_ID && message.member.permissions.has('ADMINISTRATOR')) {
         if (message.content.toLowerCase() === '!resettimers') {
             pendingResponses = {}; // Clear in-memory timers
             db.run('DELETE FROM reminders', (err) => {
