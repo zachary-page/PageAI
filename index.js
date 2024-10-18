@@ -1,3 +1,4 @@
+// Import required packages
 const { Client, GatewayIntentBits, ChannelType } = require('discord.js');
 const cron = require('node-cron');
 const sqlite3 = require('sqlite3').verbose();
@@ -8,8 +9,8 @@ const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBit
 const TOKEN = process.env.DISCORD_BOT_TOKEN;
 const MONITORED_FORUM_ID = process.env.MONITORED_FORUM_ID;
 const ADMIN_REPORT_CHANNEL_ID = process.env.ADMIN_REPORT_CHANNEL_ID;
-const EXCLUDED_DAYS = [6, 0];
-const BUSINESS_HOURS = { start: 9, end: 17 };
+const EXCLUDED_DAYS = [6, 0]; // Saturday and Sunday
+const BUSINESS_HOURS = { start: 9, end: 17 }; // Business hours (9 AM to 5 PM)
 
 // SQLite setup
 const db = new sqlite3.Database('./reminders.db', (err) => {
@@ -62,6 +63,7 @@ function monitorExistingThreads() {
                             const userId = message.author.id;
                             const currentTime = new Date();
 
+                            // Check if this user already has a pending reminder in this thread
                             db.get(`SELECT * FROM reminders WHERE userId = ? AND threadId = ?`, [userId, thread.id], (err, row) => {
                                 if (err) {
                                     console.error(`Database error:`, err);
@@ -82,6 +84,7 @@ function monitorExistingThreads() {
                                         timeout: setTimeout(() => sendReminder(userId, thread, message), delay)
                                     };
 
+                                    // Persist the reminder in the database
                                     db.run(`INSERT INTO reminders(userId, threadId, timestamp, reminderHours) VALUES(?, ?, ?, ?)`, [userId, thread.id, currentTime, reminderHours]);
 
                                     logActivity(`Started reminder for user ${userId} in thread ${thread.id}`);
@@ -162,7 +165,7 @@ client.on('messageCreate', message => {
         }
 
         // Reset timers
-        if (message.content.toLowerCase() === '!resetTimers') {
+        if (message.content.toLowerCase() === '!resettimers') {
             if (message.member.permissions.has('ADMINISTRATOR')) {
                 pendingResponses = {}; // Clear in-memory timers
                 db.run('DELETE FROM reminders', (err) => {
@@ -183,7 +186,7 @@ client.on('messageCreate', message => {
 // Restore reminders and monitor existing threads on bot start
 client.once('ready', () => {
     console.log(`Logged in as ${client.user.tag}!`);
-    monitorExistingThreads();
+    monitorExistingThreads(); // Monitor existing threads when the bot starts
 });
 
 // Log the bot in
