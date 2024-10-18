@@ -12,11 +12,29 @@ const ADMIN_REPORT_CHANNEL_ID = process.env.ADMIN_REPORT_CHANNEL_ID;
 const EXCLUDED_DAYS = [6, 0]; // Saturday and Sunday
 const BUSINESS_HOURS = { start: 9, end: 17 }; // Business hours (9 AM to 5 PM)
 
-// SQLite setup
+// SQLite setup for persistent storage
 const db = new sqlite3.Database('./reminders.db', (err) => {
-    if (err) console.error(err.message);
-    console.log('Connected to the SQLite database.');
+    if (err) {
+        console.error(err.message);
+    } else {
+        console.log('Connected to the SQLite database.');
+
+        // Ensure the 'reminders' table exists before we proceed
+        db.run(`CREATE TABLE IF NOT EXISTS reminders (
+            userId TEXT,
+            threadId TEXT,
+            timestamp TEXT,
+            reminderHours INTEGER DEFAULT 24
+        )`, (err) => {
+            if (err) {
+                console.error("Error creating reminders table:", err.message);
+            } else {
+                console.log("Reminders table created or verified.");
+            }
+        });
+    }
 });
+
 
 // Logger
 const logger = fs.createWriteStream('bot_activity.log', { flags: 'a' });
