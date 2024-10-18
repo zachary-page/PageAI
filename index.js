@@ -1,12 +1,18 @@
 // Import required packages
 const { Client, GatewayIntentBits, ChannelType } = require('discord.js');
-const cron = require('node-cron');
 const sqlite3 = require('sqlite3').verbose();
 const fs = require('fs');
 
 // Bot configuration
 const client = new Client({
-    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMessageReactions, GatewayIntentBits.DirectMessages, GatewayIntentBits.GuildMembers]
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.MessageContent,
+        GatewayIntentBits.GuildMessageReactions,
+        GatewayIntentBits.DirectMessages,
+        GatewayIntentBits.GuildMembers,
+    ],
 });
 const TOKEN = process.env.DISCORD_BOT_TOKEN;
 const MONITORED_FORUM_ID = process.env.MONITORED_FORUM_ID;
@@ -20,18 +26,21 @@ const db = new sqlite3.Database('./reminders.db', (err) => {
         console.error(err.message);
     } else {
         console.log('Connected to the SQLite database.');
-        db.run(`CREATE TABLE IF NOT EXISTS reminders (
-            userId TEXT,
-            threadId TEXT,
-            timestamp TEXT,
-            reminderHours INTEGER DEFAULT 24
-        )`, (err) => {
-            if (err) {
-                console.error("Error creating reminders table:", err.message);
-            } else {
-                console.log("Reminders table created or verified.");
+        db.run(
+            `CREATE TABLE IF NOT EXISTS reminders (
+                userId TEXT,
+                threadId TEXT,
+                timestamp TEXT,
+                reminderHours INTEGER DEFAULT 24
+            )`,
+            (err) => {
+                if (err) {
+                    console.error('Error creating reminders table:', err.message);
+                } else {
+                    console.log('Reminders table created or verified.');
+                }
             }
-        });
+        );
     }
 });
 
@@ -48,9 +57,11 @@ function calculateDelay(startDate, hours) {
 
     while (delay < hours * 60 * 60 * 1000) {
         tempDate.setHours(tempDate.getHours() + 1);
-        if (!EXCLUDED_DAYS.includes(tempDate.getDay()) &&
+        if (
+            !EXCLUDED_DAYS.includes(tempDate.getDay()) &&
             tempDate.getHours() >= BUSINESS_HOURS.start &&
-            tempDate.getHours() < BUSINESS_HOURS.end) {
+            tempDate.getHours() < BUSINESS_HOURS.end
+        ) {
             delay += 60 * 60 * 1000;
         }
     }
@@ -59,6 +70,10 @@ function calculateDelay(startDate, hours) {
 
 // Check if a user is an admin
 function isAdmin(member) {
+    // Ensure the member object is valid
+    if (!member || !member.permissions) {
+        return false; // If member is undefined or doesn't have permissions, assume not an admin
+    }
     return member.permissions.has('ADMINISTRATOR');
 }
 
@@ -70,63 +85,71 @@ function monitorExistingThreads() {
         return;
     }
 
-    forum.threads.fetchActive().then(threads => {
+    forum.threads.fetchActive().then((threads) => {
         const sortedThreads = threads.threads.sort((a, b) => b.lastMessageId - a.lastMessageId);
 
-        sortedThreads.forEach(thread => {
+        sortedThreads.forEach((thread) => {
             console.log(`Monitoring existing thread: ${thread.name} (ID: ${thread.id})`);
 
-            thread.join().then(() => {
-                console.log(`Joined thread: ${thread.name}`);
+            thread
+                .join()
+                .then(() => {
+                    console.log(`Joined thread: ${thread.name}`);
 
-                thread.messages.fetch({ limit: 10 }).then(messages => {
-                    messages.forEach(message => {
-                        if (!message.author.bot) {
-                            const userId = message.author.id;
-                            const member = thread.guild.members.cache.get(userId);
-                            const currentTime = new Date();
+                    thread.messages.fetch({ limit: 10 }).then((messages) => {
+                        messages.forEach((message) => {
+                            if (!message.author.bot) {
+                                const userId = message.author.id;
+                                const member = thread.guild.members.cache.get(userId); // Fetch member
 
-                            // Skip if user is an admin
-                            if (isAdmin(member)) return;
+                                const currentTime = new Date();
 
-                            // Check if this user already has a pending reminder in any thread
-                            db.get(`SELECT * FROM reminders WHERE userId = ?`, [userId], (err, row) => {
-                                if (err) {
-                                    console.error(`Database error:`, err);
-                                    return;
+                                // Skip setting timers for admins, but still process their messages
+                                if (isAdmin(member)) {
+                                    logActivity(`Admin message from ${message.author.username} in thread ${thread.name}`);
+                                    return; // Skip timer creation for admins
                                 }
 
-                                if (!row) {
-                                    // No reminder exists, create a new one
-                                    const reminderHours = 24;
-                                    const delay = calculateDelay(currentTime, reminderHours);
-
-                                    if (!pendingResponses[userId]) {
-                                        pendingResponses[userId] = {};
+                                // Check if this user already has a pending reminder
+                                db.get(`SELECT * FROM reminders WHERE userId = ?`, [userId], (err, row) => {
+                                    if (err) {
+                                        console.error('Database error:', err);
+                                        return;
                                     }
 
-                                    pendingResponses[userId][thread.id] = {
-                                        timestamp: currentTime,
-                                        reminderHours,
-                                        timeout: setTimeout(() => sendReminder(userId, thread, message), delay)
-                                    };
+                                    if (!row) {
+                                        // No reminder exists, create a new one for non-admins
+                                        const reminderHours = 24;
+                                        const delay = calculateDelay(currentTime, reminderHours);
 
-                                    // Persist the reminder in the database
-                                    db.run(`INSERT INTO reminders(userId, threadId, timestamp, reminderHours) VALUES(?, ?, ?, ?)`, [userId, thread.id, currentTime, reminderHours]);
+                                        if (!pendingResponses[userId]) {
+                                            pendingResponses[userId] = {};
+                                        }
 
-                                    logActivity(`Started reminder for user ${userId} in thread ${thread.id}`);
-                                }
-                            });
-                        }
+                                        pendingResponses[userId][thread.id] = {
+                                            timestamp: currentTime,
+                                            reminderHours,
+                                            timeout: setTimeout(() => sendReminder(userId, thread, message), delay),
+                                        };
+
+                                        // Persist the reminder in the database
+                                        db.run(
+                                            `INSERT INTO reminders(userId, threadId, timestamp, reminderHours) VALUES(?, ?, ?, ?)`,
+                                            [userId, thread.id, currentTime, reminderHours]
+                                        );
+
+                                        logActivity(`Started reminder for user ${userId} in thread ${thread.id}`);
+                                    }
+                                });
+                            }
+                        });
                     });
-                }).catch(err => {
-                    console.error(`Error fetching messages from thread ${thread.id}:`, err);
+                })
+                .catch((err) => {
+                    console.error(`Error joining thread ${thread.id}:`, err);
                 });
-            }).catch(err => {
-                console.error(`Error joining thread ${thread.id}:`, err);
-            });
         });
-    }).catch(err => {
+    }).catch((err) => {
         console.error('Error fetching active threads:', err);
     });
 }
@@ -136,7 +159,7 @@ function sendReminder(userId, thread, originalMessage, isManual = false) {
     const user = client.users.cache.get(userId);
     if (user) {
         const dmMessage = `Hey, it looks like you haven't responded in the thread "${thread.name}". The other participants are still waiting for your response regarding this message: "${originalMessage.content}".`;
-        user.send(dmMessage).catch(err => {
+        user.send(dmMessage).catch((err) => {
             console.error(`Error sending DM to user ${userId}:`, err);
         });
 
@@ -157,20 +180,22 @@ function sendReminder(userId, thread, originalMessage, isManual = false) {
 
 // Cleaner output for `!listReminders`
 function formatReminderOutput(rows) {
-    return rows.map(row => {
-        const user = client.users.cache.get(row.userId);
-        const username = user ? user.username : `Unknown (${row.userId})`;
-        const now = new Date();
-        const reminderTimestamp = new Date(row.timestamp);
-        const remainingTime = row.reminderHours * 60 * 60 * 1000 - (now - reminderTimestamp);
-        const hours = Math.floor(remainingTime / (60 * 60 * 1000));
-        const minutes = Math.floor((remainingTime % (60 * 60 * 1000)) / (60 * 1000));
-        return `User: ${username}, Thread: ${row.threadId}, Time Left: ${hours}h ${minutes}m`;
-    }).join('\n');
+    return rows
+        .map((row) => {
+            const user = client.users.cache.get(row.userId);
+            const username = user ? user.username : `Unknown (${row.userId})`;
+            const now = new Date();
+            const reminderTimestamp = new Date(row.timestamp);
+            const remainingTime = row.reminderHours * 60 * 60 * 1000 - (now - reminderTimestamp);
+            const hours = Math.floor(remainingTime / (60 * 60 * 1000));
+            const minutes = Math.floor((remainingTime % (60 * 60 * 1000)) / (60 * 1000));
+            return `User: ${username}, Thread: ${row.threadId}, Time Left: ${hours}h ${minutes}m`;
+        })
+        .join('\n');
 }
 
 // Command to list reminders
-client.on('messageCreate', message => {
+client.on('messageCreate', (message) => {
     const BOT_REPORTING_CHANNEL_ID = '1235265391056523264';
     if (message.channel.id === BOT_REPORTING_CHANNEL_ID) {
         if (message.content.toLowerCase() === '!listreminders') {
