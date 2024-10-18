@@ -182,6 +182,32 @@ client.on('messageCreate', message => {
                 }
             });
         }
+
+        // Command to list reminders
+        if (message.content.toLowerCase() === '!listreminders') {
+            db.all(`SELECT * FROM reminders`, (err, rows) => {
+                if (err) {
+                    message.channel.send('Error retrieving reminders.');
+                    return;
+                }
+                if (rows.length === 0) {
+                    message.channel.send('No pending reminders.');
+                } else {
+                    let reminderList = 'Pending Reminders:\n';
+                    rows.forEach(row => {
+                        const user = client.users.cache.get(row.userId);
+                        const username = user ? user.username : `Unknown (${row.userId})`;
+                        const now = new Date();
+                        const reminderTimestamp = new Date(row.timestamp);
+                        const remainingTime = row.reminderHours * 60 * 60 * 1000 - (now - reminderTimestamp);
+                        const hours = Math.floor(remainingTime / (60 * 60 * 1000));
+                        const minutes = Math.floor((remainingTime % (60 * 60 * 1000)) / (60 * 1000));
+                        reminderList += `User: ${username}, Thread: ${row.threadId}, Time Left: ${hours}h ${minutes}m\n`;
+                    });
+                    message.channel.send(reminderList);
+                }
+            });
+        }
     }
 });
 
