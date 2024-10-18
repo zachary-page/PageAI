@@ -5,7 +5,9 @@ const sqlite3 = require('sqlite3').verbose();
 const fs = require('fs');
 
 // Bot configuration
-const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMessageReactions, GatewayIntentBits.DirectMessages, GatewayIntentBits.GuildMembers] });
+const client = new Client({
+    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMessageReactions, GatewayIntentBits.DirectMessages, GatewayIntentBits.GuildMembers]
+});
 const TOKEN = process.env.DISCORD_BOT_TOKEN;
 const MONITORED_FORUM_ID = process.env.MONITORED_FORUM_ID;
 const ADMIN_REPORT_CHANNEL_ID = process.env.ADMIN_REPORT_CHANNEL_ID;
@@ -18,8 +20,6 @@ const db = new sqlite3.Database('./reminders.db', (err) => {
         console.error(err.message);
     } else {
         console.log('Connected to the SQLite database.');
-
-        // Ensure the 'reminders' table exists before we proceed
         db.run(`CREATE TABLE IF NOT EXISTS reminders (
             userId TEXT,
             threadId TEXT,
@@ -34,7 +34,6 @@ const db = new sqlite3.Database('./reminders.db', (err) => {
         });
     }
 });
-
 
 // Logger
 const logger = fs.createWriteStream('bot_activity.log', { flags: 'a' });
@@ -58,6 +57,11 @@ function calculateDelay(startDate, hours) {
     return delay;
 }
 
+// Check if a user is an admin
+function isAdmin(member) {
+    return member.permissions.has('ADMINISTRATOR');
+}
+
 // Monitor threads and avoid duplicate timers
 function monitorExistingThreads() {
     const forum = client.channels.cache.get(MONITORED_FORUM_ID);
@@ -79,10 +83,14 @@ function monitorExistingThreads() {
                     messages.forEach(message => {
                         if (!message.author.bot) {
                             const userId = message.author.id;
+                            const member = thread.guild.members.cache.get(userId);
                             const currentTime = new Date();
 
-                            // Check if this user already has a pending reminder in this thread
-                            db.get(`SELECT * FROM reminders WHERE userId = ? AND threadId = ?`, [userId, thread.id], (err, row) => {
+                            // Skip if user is an admin
+                            if (isAdmin(member)) return;
+
+                            // Check if this user already has a pending reminder in any thread
+                            db.get(`SELECT * FROM reminders WHERE userId = ?`, [userId], (err, row) => {
                                 if (err) {
                                     console.error(`Database error:`, err);
                                     return;
@@ -96,6 +104,7 @@ function monitorExistingThreads() {
                                     if (!pendingResponses[userId]) {
                                         pendingResponses[userId] = {};
                                     }
+
                                     pendingResponses[userId][thread.id] = {
                                         timestamp: currentTime,
                                         reminderHours,
