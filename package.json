@@ -1,20 +1,23 @@
 {
   "name": "pageai",
-  "description": "Discord bot for managing reminders",
   "version": "1.0.0",
+  "description": "Discord bot for managing reminders",
   "main": "index.js",
-  "author": "Zachary Page",
-  "license": "ISC",
-  "dependencies": {
-    "discord.js": "^14.0.0",
-    "dotenv": "^16.4.5",
-    "sqlite3": "^5.0.0"
-  },
-  "devDependencies": {},
   "scripts": {
     "start": "node index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
+  "dependencies": {
+    "discord.js": "^14.16.3",
+    "dotenv": "^16.4.5",
+    "sqlite3": "^5.1.7"
+  },
+  "engines": {
+    "node": "20.x",
+    "npm": "10.x"
+  },
+  "author": "Zachary Page",
+  "license": "ISC",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/zachary-page/PageAI.git"
